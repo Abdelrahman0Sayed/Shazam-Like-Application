@@ -2,6 +2,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QHBoxLayout ,QFileDialog, QMessageBox
 import sys
 import os
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from scipy.io import wavfile
@@ -269,6 +270,12 @@ class MainWindow(QtWidgets.QWidget):
             # Clear the song features from the dictionary
             if 'first_song' in self.songs_features:
                 del self.songs_features['first_song']
+            # Clear the spectrogram plot (reset the axes and redrawing empty text)
+            self.firstGraphAxis.clear()
+            self.firstGraphAxis.set_facecolor('#2b2b2b')  # Keep the background color
+            self.firstGraphAxis.text(0.5, 0.5, 'No song loaded',
+                horizontalalignment='center', verticalalignment='center', color='#ffffff')
+            self.firstGraphCanvas.draw()  # Redraw the canvas
         #     QMessageBox.information(self, "Removed", "First song has been removed.")
         # else:
         #     QMessageBox.warning(self, "Warning", "No first song to remove.")
@@ -285,6 +292,12 @@ class MainWindow(QtWidgets.QWidget):
             # Clear the song features from the dictionary
             if 'second_song' in self.songs_features:
                 del self.songs_features['second_song']
+            # Clear the spectrogram plot (reset the axes and redrawing empty text)
+            self.secondGraphAxis.clear()
+            self.secondGraphAxis.set_facecolor('#2b2b2b')  # Keep the background color
+            self.secondGraphAxis.text(0.5, 0.5, 'No song loaded',
+                horizontalalignment='center', verticalalignment='center', color='#ffffff')
+            self.secondGraphCanvas.draw()  # Redraw the canvas
         #     QMessageBox.information(self, "Removed", "Second song has been removed.")
         # else:
         #     QMessageBox.warning(self, "Warning", "No second song to remove.")
@@ -297,12 +310,43 @@ class MainWindow(QtWidgets.QWidget):
         right_percentage = 100 - left_percentage
         self.slider_value_left.setText(f"{left_percentage}%")
         self.slider_value_right.setText(f"{right_percentage}%")
+        # Call the method to compute the weighted average whenever the slider value changes
+        self.compute_weighted_average()
 
     def plotSpectrogram(self):
         """
         Plot spectrograms for the loaded songs in the respective spectrogram canvas.
         """
-        pass
+        # Plot for the first song
+        if hasattr(self, 'first_song_data'):
+            signal_data = self.first_song_data
+            sampling_rate = self.first_sampling_rate
+        else:
+            print("No first song data to plot!")
+            return
+        # Calculate the spectrogram
+        f, t, Sxx = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
+        # Plot spectrogram on the first song's canvas
+        self.firstGraphAxis.clear()  # Clear the previous plot
+        self.firstGraphAxis.set_title('First Song Spectrogram')
+        self.firstGraphAxis.set_xlabel('Time (s)')
+        self.firstGraphAxis.set_ylabel('Frequency (Hz)')
+        librosa.display.specshow(np.log(Sxx), x_axis='time', y_axis='log', sr=sampling_rate, ax=self.firstGraphAxis)
+        self.firstGraphAxis.set_facecolor('#2b2b2b')
+        self.firstGraphCanvas.draw()  # Redraw the canvas
+        # Plot for the second song (if needed)
+        if hasattr(self, 'second_song_data'):
+            signal_data = self.second_song_data
+            sampling_rate = self.second_sampling_rate
+            f, t, Sxx = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
+            # Plot spectrogram on the second song's canvas
+            self.secondGraphAxis.clear()  # Clear the previous plot
+            self.secondGraphAxis.set_title('Second Song Spectrogram')
+            self.secondGraphAxis.set_xlabel('Time (s)')
+            self.secondGraphAxis.set_ylabel('Frequency (Hz)')
+            librosa.display.specshow(np.log(Sxx), x_axis='time', y_axis='log', sr=sampling_rate, ax=self.secondGraphAxis)
+            self.secondGraphAxis.set_facecolor('#2b2b2b')
+            self.secondGraphCanvas.draw()  # Redraw the canvas
 
     def Features(self, file_data, sr, spectro):
         features = {}
@@ -343,6 +387,33 @@ class MainWindow(QtWidgets.QWidget):
         }
         return song_dict
 
+    def compute_weighted_average(self):
+        """
+        Compute the weighted average of the first and second song data based on the slider value.
+        """
+        if hasattr(self, 'first_song_data') and hasattr(self, 'second_song_data'):
+            slider_value = self.slider.value()  # Get the slider value (0-100)
+            weight_first_song = slider_value / 100
+            weight_second_song = 1 - weight_first_song
+            # Make sure the two songs have the same length by trimming the longer one or padding the shorter one
+            min_length = min(len(self.first_song_data), len(self.second_song_data))
+            first_song_trimmed = self.first_song_data[:min_length]
+            second_song_trimmed = self.second_song_data[:min_length]
+            # Weighted sum
+            weighted_signal = weight_first_song * first_song_trimmed + weight_second_song * second_song_trimmed
+            # Store the new weighted signal and treat it as a new song
+            self.new_song_data = weighted_signal
+            self.new_sampling_rate = self.first_sampling_rate  # Assuming both songs have the same sampling rate
+            # compute the features and store them as you did for the original songs
+            f, t, spectrogram = signal.spectrogram(weighted_signal, fs=self.new_sampling_rate, window='hann')
+            features = self.Features(weighted_signal, self.new_sampling_rate, spectrogram)
+            song_dict = self.create_song_dict("weighted_song")
+            song_dict["weighted_song"]["spectrogram_Hash"] = self.Hash(spectrogram)
+            song_dict["weighted_song"]['melspectrogram_Hash'] = self.Hash(features['melspectro'])
+            song_dict["weighted_song"]['mfcc_Hash'] = self.Hash(features['mfccs'])
+            song_dict["weighted_song"]['chroma_stft_Hash'] = self.Hash(features['chroma_stft'])
+            song_dict["weighted_song"]['spectral_centroid_Hash'] = self.Hash(features['spectral_centroid'])
+            self.songs_features['weighted_song'] = song_dict
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
