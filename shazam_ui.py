@@ -7,6 +7,11 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from scipy.io import wavfile
 from scipy import signal
 import numpy as np
+import librosa
+import librosa.display
+import imagehash
+from PIL import Image
+import hashlib
 
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -17,6 +22,7 @@ class MainWindow(QtWidgets.QWidget):
         # Variables to store loaded file paths
         self.first_song_path = None
         self.second_song_path = None
+        self.songs_features={}
 
         # Apply dark theme
         self.setStyleSheet(
@@ -202,13 +208,25 @@ class MainWindow(QtWidgets.QWidget):
                 self.first_song_path = file_path
                 self.song_1_placeholder.setText(os.path.basename(file_path))
                 #QMessageBox.information(self, "Success", f"Loaded: {os.path.basename(file_path)}")
-                sampling_rate, signal_data = wavfile.read(file_path)
+                signal_data, sampling_rate = librosa.load(file_path)
                 self.first_song_data = signal_data
                 self.first_sampling_rate = sampling_rate
                 # Plot the spectrogram for the first song
                 self.plotSpectrogram()
-            # except Exception as e:
-            #     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load the first song:\n{str(e)}")
+            # # except Exception as e:
+            # #     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load the first song:\n{str(e)}")
+            # # Calculate the spectrogram and hash the features
+            f, t, spectrogram = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
+            features = self.Features(signal_data, sampling_rate, spectrogram)  # You can pass None for spectro here, librosa will handle it
+            # Create song dictionary and store hashed features
+            song_dict = self.create_song_dict(file_path)
+            song_dict[file_path]["spectrogram_Hash"] = self.Hash(spectrogram)
+            song_dict[file_path]['melspectrogram_Hash'] = self.Hash(features['melspectro'])
+            song_dict[file_path]['mfcc_Hash'] = self.Hash(features['mfccs'])
+            song_dict[file_path]['chroma_stft_Hash'] = self.Hash(features['chroma_stft'])
+            song_dict[file_path]['spectral_centroid_Hash'] = self.Hash(features['spectral_centroid'])
+            # Store the dictionary for the first song in a dictionary with 'first_song' key
+            self.songs_features['first_song'] = song_dict
 
     def load_second_song(self):
         """
@@ -219,13 +237,25 @@ class MainWindow(QtWidgets.QWidget):
             self.second_song_path = file_path
             self.song_2_placeholder.setText(os.path.basename(file_path))
             #QMessageBox.information(self, "Success", f"Loaded: {os.path.basename(file_path)}")
-            sampling_rate, signal_data = wavfile.read(file_path)
+            signal_data, sampling_rate = librosa.load(file_path)
             self.second_song_data = signal_data
             self.second_sampling_rate = sampling_rate
             # Plot the spectrogram for the second song
             self.plotSpectrogram()
-        # except Exception as e:
-        #     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load the second song:\n{str(e)}")
+        # # except Exception as e:
+        # #     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load the second song:\n{str(e)}")
+        # Calculate the spectrogram and hash the features
+        f, t, spectrogram = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
+        features = self.Features(signal_data, sampling_rate, spectrogram)  # You can pass None for spectro here, librosa will handle it
+        # Create song dictionary and store hashed features
+        song_dict = self.create_song_dict(file_path)
+        song_dict[file_path]["spectrogram_Hash"] = self.Hash(spectrogram)
+        song_dict[file_path]['melspectrogram_Hash'] = self.Hash(features['melspectro'])
+        song_dict[file_path]['mfcc_Hash'] = self.Hash(features['mfccs'])
+        song_dict[file_path]['chroma_stft_Hash'] = self.Hash(features['chroma_stft'])
+        song_dict[file_path]['spectral_centroid_Hash'] = self.Hash(features['spectral_centroid'])
+        # Store the dictionary for the second song in a dictionary with 'second_song' key
+        self.songs_features['second_song'] = song_dict
 
     def remove_first_song(self):
         """
@@ -234,6 +264,11 @@ class MainWindow(QtWidgets.QWidget):
         if self.first_song_path:
             self.first_song_path = None
             self.song_1_placeholder.setText("group_XX_song_XX")
+            self.first_song_data = None
+            self.first_sampling_rate = None
+            # Clear the song features from the dictionary
+            if 'first_song' in self.songs_features:
+                del self.songs_features['first_song']
         #     QMessageBox.information(self, "Removed", "First song has been removed.")
         # else:
         #     QMessageBox.warning(self, "Warning", "No first song to remove.")
@@ -245,6 +280,11 @@ class MainWindow(QtWidgets.QWidget):
         if self.second_song_path:
             self.second_song_path = None
             self.song_2_placeholder.setText("group_XX_song_XX")
+            self.second_song_data = None
+            self.second_sampling_rate = None
+            # Clear the song features from the dictionary
+            if 'second_song' in self.songs_features:
+                del self.songs_features['second_song']
         #     QMessageBox.information(self, "Removed", "Second song has been removed.")
         # else:
         #     QMessageBox.warning(self, "Warning", "No second song to remove.")
@@ -264,15 +304,44 @@ class MainWindow(QtWidgets.QWidget):
         """
         pass
 
+    def Features(self, file_data, sr, spectro):
+        features = {}
+        
+        # Spectrogram (magnitude spectrogram)  let librosa compute the spectrogram
+        features['melspectro'] = librosa.feature.melspectrogram(y=file_data, sr=sr)
+        
+        # Chroma STFT (Chromagram from short-time Fourier transform)
+        features['chroma_stft'] = librosa.feature.chroma_stft(y=file_data, sr=sr)
+        
+        # MFCCs (Mel-frequency cepstral coefficients)
+        features['mfccs'] = librosa.feature.mfcc(y=file_data.astype('float64'), sr=sr)
+        
+        # Spectral Centroid (measure of brightness)
+        features['spectral_centroid'] = librosa.feature.spectral_centroid(y=file_data, sr=sr)
+        
+        return features
+    
+    def Hash(self,feature):
+        """
+        Computes a perceptual hash of the given feature using a 16-bit hash size.
+        """
+        data = Image.fromarray(feature)
+        return imagehash.phash(data, hash_size=16).__str__()
 
-
-
-
-
-
-
-
-
+    def create_song_dict(self, file_name):
+        """
+        Creates a dictionary for storing song features and hashes.
+        """
+        song_dict = {
+            file_name: {
+                "spectrogram_Hash": None,
+                "melspectrogram_Hash": None,
+                "mfcc_Hash": None,
+                "chroma_stft_Hash": None,
+                "spectral_centroid_Hash": None
+            }
+        }
+        return song_dict
 
 
 if __name__ == "__main__":
