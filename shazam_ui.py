@@ -1,14 +1,22 @@
 from PyQt5 import QtWidgets, QtCore, QtGui 
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QHBoxLayout 
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QHBoxLayout ,QFileDialog, QMessageBox
 import sys
+import os
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from scipy.io import wavfile
+from scipy import signal
+import numpy as np
 
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Song Fingerprint")
         self.setGeometry(100, 100, 1200, 800)
+
+        # Variables to store loaded file paths
+        self.first_song_path = None
+        self.second_song_path = None
 
         # Apply dark theme
         self.setStyleSheet(
@@ -175,6 +183,97 @@ class MainWindow(QtWidgets.QWidget):
         results_layout.addWidget(self.results_table)
 
         layout.addLayout(results_layout)
+
+        # Connect buttons to functions
+        self.load_1st_song_btn.clicked.connect(self.load_first_song)
+        self.load_2nd_song_btn.clicked.connect(self.load_second_song)
+        self.remove_1st_song_btn.clicked.connect(self.remove_first_song)
+        self.remove_2nd_song_btn.clicked.connect(self.remove_second_song)
+        # Connect slider movement to the update function
+        self.slider.valueChanged.connect(self.update_slider_percentages)
+
+
+    def load_first_song(self):
+            """
+            Load the first song file and display its name in the placeholder.
+            """
+            file_path, _ = QFileDialog.getOpenFileName(self, "Load First Song", "", "Audio Files (*.wav)")
+            if file_path:
+                self.first_song_path = file_path
+                self.song_1_placeholder.setText(os.path.basename(file_path))
+                #QMessageBox.information(self, "Success", f"Loaded: {os.path.basename(file_path)}")
+                sampling_rate, signal_data = wavfile.read(file_path)
+                self.first_song_data = signal_data
+                self.first_sampling_rate = sampling_rate
+                # Plot the spectrogram for the first song
+                self.plotSpectrogram()
+            # except Exception as e:
+            #     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load the first song:\n{str(e)}")
+
+    def load_second_song(self):
+        """
+        Load the second song file and display its name in the placeholder.
+        """
+        file_path, _ = QFileDialog.getOpenFileName(self, "Load Second Song", "", "Audio Files (*.wav)")
+        if file_path:
+            self.second_song_path = file_path
+            self.song_2_placeholder.setText(os.path.basename(file_path))
+            #QMessageBox.information(self, "Success", f"Loaded: {os.path.basename(file_path)}")
+            sampling_rate, signal_data = wavfile.read(file_path)
+            self.second_song_data = signal_data
+            self.second_sampling_rate = sampling_rate
+            # Plot the spectrogram for the second song
+            self.plotSpectrogram()
+        # except Exception as e:
+        #     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load the second song:\n{str(e)}")
+
+    def remove_first_song(self):
+        """
+        Remove the first song selection.
+        """
+        if self.first_song_path:
+            self.first_song_path = None
+            self.song_1_placeholder.setText("group_XX_song_XX")
+        #     QMessageBox.information(self, "Removed", "First song has been removed.")
+        # else:
+        #     QMessageBox.warning(self, "Warning", "No first song to remove.")
+
+    def remove_second_song(self):
+        """
+        Remove the second song selection.
+        """
+        if self.second_song_path:
+            self.second_song_path = None
+            self.song_2_placeholder.setText("group_XX_song_XX")
+        #     QMessageBox.information(self, "Removed", "Second song has been removed.")
+        # else:
+        #     QMessageBox.warning(self, "Warning", "No second song to remove.")
+
+    def update_slider_percentages(self):
+        """
+        Update the percentages displayed on the left and right of the slider.
+        """
+        left_percentage = self.slider.value()
+        right_percentage = 100 - left_percentage
+        self.slider_value_left.setText(f"{left_percentage}%")
+        self.slider_value_right.setText(f"{right_percentage}%")
+
+    def plotSpectrogram(self):
+        """
+        Plot spectrograms for the loaded songs in the respective spectrogram canvas.
+        """
+        pass
+
+
+
+
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
