@@ -316,38 +316,54 @@ class UI_MainWindow(QtWidgets.QWidget):
 
     def plotSpectrogram(self):
         """
-        Plot spectrograms for the loaded songs in the respective spectrogram canvas.
+        Plot spectrograms for the loaded songs with zero handling.
         """
-        # Plot for the first song
-        if hasattr(self, 'first_song_data'):
-            signal_data = self.first_song_data
-            sampling_rate = self.first_sampling_rate
-        else:
-            print("No first song data to plot!")
-            return
-        # Calculate the spectrogram
-        f, t, Sxx = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
-        # Plot spectrogram on the first song's canvas
-        self.firstGraphAxis.clear()  # Clear the previous plot
-        self.firstGraphAxis.set_title('First Song Spectrogram')
-        self.firstGraphAxis.set_xlabel('Time (s)')
-        self.firstGraphAxis.set_ylabel('Frequency (Hz)')
-        librosa.display.specshow(np.log(Sxx), x_axis='time', y_axis='log', sr=sampling_rate, ax=self.firstGraphAxis)
-        self.firstGraphAxis.set_facecolor('#2b2b2b')
-        self.firstGraphCanvas.draw()  # Redraw the canvas
-        # Plot for the second song (if needed)
-        if hasattr(self, 'second_song_data'):
-            signal_data = self.second_song_data
-            sampling_rate = self.second_sampling_rate
+        def plot_single_spectrogram(signal_data, sampling_rate, axis, canvas, title):
+            if signal_data is None or len(signal_data) == 0:
+                return False
+                
+            # Calculate spectrogram with validation
             f, t, Sxx = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
-            # Plot spectrogram on the second song's canvas
-            self.secondGraphAxis.clear()  # Clear the previous plot
-            self.secondGraphAxis.set_title('Second Song Spectrogram')
-            self.secondGraphAxis.set_xlabel('Time (s)')
-            self.secondGraphAxis.set_ylabel('Frequency (Hz)')
-            librosa.display.specshow(np.log(Sxx), x_axis='time', y_axis='log', sr=sampling_rate, ax=self.secondGraphAxis)
-            self.secondGraphAxis.set_facecolor('#2b2b2b')
-            self.secondGraphCanvas.draw()  # Redraw the canvas
+            
+            # Add small constant to avoid log(0)
+            eps = np.finfo(float).eps
+            log_spec = np.log(Sxx + eps)
+            
+            # Plot spectrogram
+            axis.clear()
+            axis.set_title(title)
+            axis.set_xlabel('Time (s)')
+            axis.set_ylabel('Frequency (Hz)')
+            img = librosa.display.specshow(
+                log_spec, 
+                x_axis='time', 
+                y_axis='log', 
+                sr=sampling_rate, 
+                ax=axis
+            )
+            axis.set_facecolor('#2b2b2b')
+            canvas.draw()
+            return True
+
+        # Plot first song
+        if hasattr(self, 'first_song_data'):
+            plot_single_spectrogram(
+                self.first_song_data,
+                self.first_sampling_rate,
+                self.firstGraphAxis,
+                self.firstGraphCanvas,
+                'First Song Spectrogram'
+            )
+
+        # Plot second song
+        if hasattr(self, 'second_song_data'):
+            plot_single_spectrogram(
+                self.second_song_data,
+                self.second_sampling_rate,
+                self.secondGraphAxis,
+                self.secondGraphCanvas,
+                'Second Song Spectrogram'
+            )
 
     def Features(self, file_data, sr, spectro):
         features = {}
