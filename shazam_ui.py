@@ -4,12 +4,14 @@ import sys
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-class MainWindow(QtWidgets.QWidget):
+class UI_MainWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Song Fingerprint")
         self.setGeometry(100, 100, 1200, 800)
+        self.setupUi()
 
+    def setupUi(self):
         # Apply dark theme
         self.setStyleSheet(
             """
@@ -67,7 +69,6 @@ class MainWindow(QtWidgets.QWidget):
             }
             """
         )
-
         # Layout setup
         layout = QtWidgets.QVBoxLayout(self)
 
@@ -178,6 +179,6 @@ class MainWindow(QtWidgets.QWidget):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    window = MainWindow()
+    window = UI_MainWindow()
     window.show()
     sys.exit(app.exec_())
