@@ -1,8 +1,18 @@
 from PyQt5 import QtWidgets, QtCore, QtGui 
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QHBoxLayout 
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QHBoxLayout ,QFileDialog, QMessageBox
 import sys
+import os
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from scipy.io import wavfile
+from scipy import signal
+import numpy as np
+import librosa
+import librosa.display
+import imagehash
+from PIL import Image
+import hashlib
 
 class UI_MainWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -12,6 +22,11 @@ class UI_MainWindow(QtWidgets.QWidget):
         self.setupUi()
 
     def setupUi(self):
+        # Variables to store loaded file paths
+        self.first_song_path = None
+        self.second_song_path = None
+        self.songs_features={}
+
         # Apply dark theme
         self.setStyleSheet(
             """
@@ -176,6 +191,230 @@ class UI_MainWindow(QtWidgets.QWidget):
         results_layout.addWidget(self.results_table)
 
         layout.addLayout(results_layout)
+
+        # Connect buttons to functions
+        self.load_1st_song_btn.clicked.connect(self.load_first_song)
+        self.load_2nd_song_btn.clicked.connect(self.load_second_song)
+        self.remove_1st_song_btn.clicked.connect(self.remove_first_song)
+        self.remove_2nd_song_btn.clicked.connect(self.remove_second_song)
+        # Connect slider movement to the update function
+        self.slider.valueChanged.connect(self.update_slider_percentages)
+
+
+    def load_first_song(self):
+            """
+            Load the first song file and display its name in the placeholder.
+            """
+            file_path, _ = QFileDialog.getOpenFileName(self, "Load First Song", "", "Audio Files (*.wav)")
+            if file_path:
+                self.first_song_path = file_path
+                self.song_1_placeholder.setText(os.path.basename(file_path))
+                #QMessageBox.information(self, "Success", f"Loaded: {os.path.basename(file_path)}")
+                signal_data, sampling_rate = librosa.load(file_path)
+                self.first_song_data = signal_data
+                self.first_sampling_rate = sampling_rate
+                # Plot the spectrogram for the first song
+                self.plotSpectrogram()
+            # # except Exception as e:
+            # #     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load the first song:\n{str(e)}")
+            # # Calculate the spectrogram and hash the features
+            f, t, spectrogram = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
+            features = self.Features(signal_data, sampling_rate, spectrogram)  # You can pass None for spectro here, librosa will handle it
+            # Create song dictionary and store hashed features
+            song_dict = self.create_song_dict(file_path)
+            song_dict[file_path]["spectrogram_Hash"] = self.Hash(spectrogram)
+            song_dict[file_path]['melspectrogram_Hash'] = self.Hash(features['melspectro'])
+            song_dict[file_path]['mfcc_Hash'] = self.Hash(features['mfccs'])
+            song_dict[file_path]['chroma_stft_Hash'] = self.Hash(features['chroma_stft'])
+            song_dict[file_path]['spectral_centroid_Hash'] = self.Hash(features['spectral_centroid'])
+            # Store the dictionary for the first song in a dictionary with 'first_song' key
+            self.songs_features['first_song'] = song_dict
+
+    def load_second_song(self):
+        """
+        Load the second song file and display its name in the placeholder.
+        """
+        file_path, _ = QFileDialog.getOpenFileName(self, "Load Second Song", "", "Audio Files (*.wav)")
+        if file_path:
+            self.second_song_path = file_path
+            self.song_2_placeholder.setText(os.path.basename(file_path))
+            #QMessageBox.information(self, "Success", f"Loaded: {os.path.basename(file_path)}")
+            signal_data, sampling_rate = librosa.load(file_path)
+            self.second_song_data = signal_data
+            self.second_sampling_rate = sampling_rate
+            # Plot the spectrogram for the second song
+            self.plotSpectrogram()
+        # # except Exception as e:
+        # #     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load the second song:\n{str(e)}")
+        # Calculate the spectrogram and hash the features
+        f, t, spectrogram = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
+        features = self.Features(signal_data, sampling_rate, spectrogram)  # You can pass None for spectro here, librosa will handle it
+        # Create song dictionary and store hashed features
+        song_dict = self.create_song_dict(file_path)
+        song_dict[file_path]["spectrogram_Hash"] = self.Hash(spectrogram)
+        song_dict[file_path]['melspectrogram_Hash'] = self.Hash(features['melspectro'])
+        song_dict[file_path]['mfcc_Hash'] = self.Hash(features['mfccs'])
+        song_dict[file_path]['chroma_stft_Hash'] = self.Hash(features['chroma_stft'])
+        song_dict[file_path]['spectral_centroid_Hash'] = self.Hash(features['spectral_centroid'])
+        # Store the dictionary for the second song in a dictionary with 'second_song' key
+        self.songs_features['second_song'] = song_dict
+
+    def remove_first_song(self):
+        """
+        Remove the first song selection.
+        """
+        if self.first_song_path:
+            self.first_song_path = None
+            self.song_1_placeholder.setText("group_XX_song_XX")
+            self.first_song_data = None
+            self.first_sampling_rate = None
+            # Clear the song features from the dictionary
+            if 'first_song' in self.songs_features:
+                del self.songs_features['first_song']
+            # Clear the spectrogram plot (reset the axes and redrawing empty text)
+            self.firstGraphAxis.clear()
+            self.firstGraphAxis.set_facecolor('#2b2b2b')  # Keep the background color
+            self.firstGraphAxis.text(0.5, 0.5, 'No song loaded',
+                horizontalalignment='center', verticalalignment='center', color='#ffffff')
+            self.firstGraphCanvas.draw()  # Redraw the canvas
+        #     QMessageBox.information(self, "Removed", "First song has been removed.")
+        # else:
+        #     QMessageBox.warning(self, "Warning", "No first song to remove.")
+
+    def remove_second_song(self):
+        """
+        Remove the second song selection.
+        """
+        if self.second_song_path:
+            self.second_song_path = None
+            self.song_2_placeholder.setText("group_XX_song_XX")
+            self.second_song_data = None
+            self.second_sampling_rate = None
+            # Clear the song features from the dictionary
+            if 'second_song' in self.songs_features:
+                del self.songs_features['second_song']
+            # Clear the spectrogram plot (reset the axes and redrawing empty text)
+            self.secondGraphAxis.clear()
+            self.secondGraphAxis.set_facecolor('#2b2b2b')  # Keep the background color
+            self.secondGraphAxis.text(0.5, 0.5, 'No song loaded',
+                horizontalalignment='center', verticalalignment='center', color='#ffffff')
+            self.secondGraphCanvas.draw()  # Redraw the canvas
+        #     QMessageBox.information(self, "Removed", "Second song has been removed.")
+        # else:
+        #     QMessageBox.warning(self, "Warning", "No second song to remove.")
+
+    def update_slider_percentages(self):
+        """
+        Update the percentages displayed on the left and right of the slider.
+        """
+        left_percentage = self.slider.value()
+        right_percentage = 100 - left_percentage
+        self.slider_value_left.setText(f"{left_percentage}%")
+        self.slider_value_right.setText(f"{right_percentage}%")
+        # Call the method to compute the weighted average whenever the slider value changes
+        self.compute_weighted_average()
+
+    def plotSpectrogram(self):
+        """
+        Plot spectrograms for the loaded songs in the respective spectrogram canvas.
+        """
+        # Plot for the first song
+        if hasattr(self, 'first_song_data'):
+            signal_data = self.first_song_data
+            sampling_rate = self.first_sampling_rate
+        else:
+            print("No first song data to plot!")
+            return
+        # Calculate the spectrogram
+        f, t, Sxx = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
+        # Plot spectrogram on the first song's canvas
+        self.firstGraphAxis.clear()  # Clear the previous plot
+        self.firstGraphAxis.set_title('First Song Spectrogram')
+        self.firstGraphAxis.set_xlabel('Time (s)')
+        self.firstGraphAxis.set_ylabel('Frequency (Hz)')
+        librosa.display.specshow(np.log(Sxx), x_axis='time', y_axis='log', sr=sampling_rate, ax=self.firstGraphAxis)
+        self.firstGraphAxis.set_facecolor('#2b2b2b')
+        self.firstGraphCanvas.draw()  # Redraw the canvas
+        # Plot for the second song (if needed)
+        if hasattr(self, 'second_song_data'):
+            signal_data = self.second_song_data
+            sampling_rate = self.second_sampling_rate
+            f, t, Sxx = signal.spectrogram(signal_data, fs=sampling_rate, window='hann')
+            # Plot spectrogram on the second song's canvas
+            self.secondGraphAxis.clear()  # Clear the previous plot
+            self.secondGraphAxis.set_title('Second Song Spectrogram')
+            self.secondGraphAxis.set_xlabel('Time (s)')
+            self.secondGraphAxis.set_ylabel('Frequency (Hz)')
+            librosa.display.specshow(np.log(Sxx), x_axis='time', y_axis='log', sr=sampling_rate, ax=self.secondGraphAxis)
+            self.secondGraphAxis.set_facecolor('#2b2b2b')
+            self.secondGraphCanvas.draw()  # Redraw the canvas
+
+    def Features(self, file_data, sr, spectro):
+        features = {}
+        
+        # Spectrogram (magnitude spectrogram)  let librosa compute the spectrogram
+        features['melspectro'] = librosa.feature.melspectrogram(y=file_data, sr=sr)
+        
+        # Chroma STFT (Chromagram from short-time Fourier transform)
+        features['chroma_stft'] = librosa.feature.chroma_stft(y=file_data, sr=sr)
+        
+        # MFCCs (Mel-frequency cepstral coefficients)
+        features['mfccs'] = librosa.feature.mfcc(y=file_data.astype('float64'), sr=sr)
+        
+        # Spectral Centroid (measure of brightness)
+        features['spectral_centroid'] = librosa.feature.spectral_centroid(y=file_data, sr=sr)
+        
+        return features
+    
+    def Hash(self,feature):
+        """
+        Computes a perceptual hash of the given feature using a 16-bit hash size.
+        """
+        data = Image.fromarray(feature)
+        return imagehash.phash(data, hash_size=16).__str__()
+
+    def create_song_dict(self, file_name):
+        """
+        Creates a dictionary for storing song features and hashes.
+        """
+        song_dict = {
+            file_name: {
+                "spectrogram_Hash": None,
+                "melspectrogram_Hash": None,
+                "mfcc_Hash": None,
+                "chroma_stft_Hash": None,
+                "spectral_centroid_Hash": None
+            }
+        }
+        return song_dict
+
+    def compute_weighted_average(self):
+        """
+        Compute the weighted average of the first and second song data based on the slider value.
+        """
+        if hasattr(self, 'first_song_data') and hasattr(self, 'second_song_data'):
+            slider_value = self.slider.value()  # Get the slider value (0-100)
+            weight_first_song = slider_value / 100
+            weight_second_song = 1 - weight_first_song
+            # Make sure the two songs have the same length by trimming the longer one or padding the shorter one
+            min_length = min(len(self.first_song_data), len(self.second_song_data))
+            first_song_trimmed = self.first_song_data[:min_length]
+            second_song_trimmed = self.second_song_data[:min_length]
+            # Weighted sum
+            weighted_signal = weight_first_song * first_song_trimmed + weight_second_song * second_song_trimmed
+            # Store the new weighted signal and treat it as a new song
+            self.new_song_data = weighted_signal
+            self.new_sampling_rate = self.first_sampling_rate  # Assuming both songs have the same sampling rate
+            # compute the features and store them as you did for the original songs
+            f, t, spectrogram = signal.spectrogram(weighted_signal, fs=self.new_sampling_rate, window='hann')
+            features = self.Features(weighted_signal, self.new_sampling_rate, spectrogram)
+            song_dict = self.create_song_dict("weighted_song")
+            song_dict["weighted_song"]["spectrogram_Hash"] = self.Hash(spectrogram)
+            song_dict["weighted_song"]['melspectrogram_Hash'] = self.Hash(features['melspectro'])
+            song_dict["weighted_song"]['mfcc_Hash'] = self.Hash(features['mfccs'])
+            song_dict["weighted_song"]['chroma_stft_Hash'] = self.Hash(features['chroma_stft'])
+            song_dict["weighted_song"]['spectral_centroid_Hash'] = self.Hash(features['spectral_centroid'])
+            self.songs_features['weighted_song'] = song_dict
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
