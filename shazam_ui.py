@@ -432,6 +432,8 @@ class UI_MainWindow(QtWidgets.QWidget):
             song_dict["weighted_song"]['spectral_centroid_Hash'] = self.Hash(features['spectral_centroid'])
             self.songs_features['weighted_song'] = song_dict
 
+
+
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     window = UI_MainWindow()
