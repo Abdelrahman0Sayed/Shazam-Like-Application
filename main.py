@@ -9,12 +9,24 @@ import librosa
 import scipy
 import sounddevice as sd
 import numpy as np
+import imagehash
+from PIL import Image
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+import pandas as pd
+from imagehash import hex_to_hash
+
 
 class MainWindow(UI_MainWindow):
     
     def __init__(self):
         super().__init__()
         # Attributes
+        self.firstMediaPlayer = QMediaPlayer()
+        self.secondMediaPlayer = QMediaPlayer()
+
+        self.first_file_path = None
+        self.second_file_path = None
+
         self.firstFileData = None
         self.firstFileSpectro = None
         self.firstSpectroFeatures = []
@@ -25,36 +37,156 @@ class MainWindow(UI_MainWindow):
         self.secondSpectroFeatures = []
         self.second_colorbar = None
 
+        # Controls Attributes
+        self.firstGraphPlaying = False
+        self.secondGraphPlaying = False
+
+        self.firstGraphTimer= QTimer()
+        self.secondGraphTimer = QTimer()
+        self.firstGraphTimer.timeout.connect(lambda: self.updatePosition(1))
+        self.secondGraphTimer.timeout.connect(lambda: self.updatePosition(2))
+        self.first_plot_item = None
+        self.second_plot_item = None
+        self.first_line_item = None
+        self.second_line_item = None
+
         # Lets Create Our Connections
         self.load_1st_song_btn.clicked.connect(lambda: self.apply_data_recognition(1))
         self.load_2nd_song_btn.clicked.connect(lambda: self.apply_data_recognition(2))
         self.remove_1st_song_btn.clicked.connect(lambda: self.clear_audio_data(1))
         self.remove_2nd_song_btn.clicked.connect(lambda: self.clear_audio_data(2))
+        self.firstGraphplayButton.clicked.connect(lambda: self.play_audio(1))
+        self.secondGraphPlayButton.clicked.connect(lambda: self.play_audio(2))
+        self.firstGraphreplayButton.clicked.connect(lambda: self.replay_audio(1))
+        self.secondGraphReplayButton.clicked.connect(lambda: self.replay_audio(2))
 
+    
+    def play_audio(self, fileNumber):
+        try:
+            if fileNumber == 1:
+                if self.firstGraphPlaying:
+                    self.stopAudio(1)
+                    self.firstGraphPlaying = False
+                    self.firstGraphTimer.stop()
+
+                else:
+                    self.firstMediaPlayer.play()
+                    self.firstGraphPlaying = True
+                    self.firstGraphTimer.start(100)  # Update every 100ms
+
+            else:
+                if self.secondGraphPlaying:
+                    self.stopAudio(2)   
+                    self.secondGraphPlaying = False
+                    self.firstGraphTimer.stop()
+
+                else:
+                    self.secondMediaPlayer.play()
+                    self.secondGraphPlaying = True
+                    self.secondGraphTimer.start(100)
+            
+            self.togglePlayingIcon(fileNumber)
+
+        except Exception as e:
+            print(f"Error playing audio: {e}")
+            QMessageBox.critical(self, "Error", "Failed to play audio file")
+
+    def updatePosition(self, fileNumber):
+        try:
+            if fileNumber == 1:
+                position = self.firstMediaPlayer.position()
+                duration = self.firstMediaPlayer.duration()
+                if duration > 0:
+                    # Create plot only once if not exists
+                    if self.first_plot_item is None:
+                        self.first_plot_item = self.firstAudioGraph.plot(self.firstFileData, pen=(0,0,255))
+                    
+                    # Update only the vertical line position
+                    normalized_pos = position / duration
+                    x_pos = normalized_pos * len(self.firstFileData)
+                    
+                    if self.first_line_item is not None:
+                        self.firstAudioGraph.removeItem(self.first_line_item)
+                    self.first_line_item = self.firstAudioGraph.addLine(x=x_pos, pen='r')
+            else:
+                position = self.secondMediaPlayer.position()
+                duration = self.secondMediaPlayer.duration()
+                if duration > 0:
+                    if self.second_plot_item is None:
+                        self.second_plot_item = self.secondAudioGraph.plot(self.secondFileData, pen=(0,0,255))
+                    
+                    normalized_pos = position / duration
+                    x_pos = normalized_pos * len(self.secondFileData)
+                    
+                    if self.second_line_item is not None:
+                        self.secondAudioGraph.removeItem(self.second_line_item)
+                    self.second_line_item = self.secondAudioGraph.addLine(x=x_pos, pen='r')
+                    
+        except Exception as e:
+            print(f"Error updating position: {e}")
+
+
+    def stopAudio(self, fileNumber):
+        if fileNumber == 1:
+            self.firstMediaPlayer.pause()
+            self.firstGraphPlaying = False
+        else:
+            self.secondMediaPlayer.pause()
+            self.secondGraphPlaying = False
+
+    def replay_audio(self, fileNumber):
+        if fileNumber == 1:
+            self.firstMediaPlayer.stop()
+            self.firstMediaPlayer.play()
+            self.firstGraphPlaying = True
+        else:
+            self.secondMediaPlayer.stop()
+            self.secondMediaPlayer.play()
+            self.secondGraphPlaying = True
+        
+        self.togglePlayingIcon(fileNumber)
+
+    def togglePlayingIcon(self, fileNumber):
+        if fileNumber == 1:
+            if self.firstGraphPlaying:
+                self.firstGraphplayButton.setIcon(QIcon("icons/pause.png"))
+            else:
+                self.firstGraphplayButton.setIcon(QIcon("icons/play.png"))
+        else:
+            if self.secondGraphPlaying:
+                self.secondGraphPlayButton.setIcon(QIcon("icons/pause.png"))
+            else:
+                self.secondGraphPlayButton.setIcon(QIcon("icons/play.png"))
 
     def apply_data_recognition(self, fileNumber):
-        try: 
-            # First we need to get the load the fileData.
-            
-            audioData , samplingRate = self.load_song_file()
+        try:             
+            song_name , filePath, audioData, samplingRate = self.load_song_file()
             if fileNumber == 1:
+                url = QUrl.fromLocalFile(filePath)
                 self.firstFileData = audioData
+                self.first_media_content = QMediaContent(url)
+                self.firstMediaPlayer.setMedia(self.first_media_content)
+                self.first_file_path = filePath
+                self.firstAudioGraph.plot(audioData, pen=(0,0,255))
+                self.song_1_placeholder.setText(song_name)
             else:
+                url = QUrl.fromLocalFile(filePath)
                 self.secondFileData = audioData
-
-
-            # Convert it to Spectrogram and Display it.
-            self.convert_to_spectrogram(audioData, FileNumber=fileNumber)
-
-            # Extract the Features from the Spectrogram.
+                self.second_media_content = QMediaContent(url)
+                self.secondMediaPlayer.setMedia(self.second_media_content)
+                self.second_file_path = filePath
+                self.secondAudioGraph.plot(audioData, pen=(0,0,255))
+                self.song_2_placeholder.setText(song_name)
+            
+            print("Audio Data Loaded Sucessfully")
             self.extract_features(fileNumber)
             print("Data Extracted Sucessfully")
 
-            #---------------------------- We can Move the Following if we want to calculate for the mixed one (which also can be just one of the two audio files) ---------------------------------------------#
-            # Hashing the Features (Preceptual Hashing).
-            data_hash = self.data_hashing(fileNumber)
-            print(data_hash)
-            # Apply Searching on the dataset.
+            hashing_dict= self.data_hashing(fileNumber)
+            print("Hashing Completed")
+            similarity_result = self.compare_hashes(hashing_dict)
+            print("Hashes Compared")
+            self.rearrange_songs(similarity_result)
 
         except Exception as e:
             print("Recognition Failed: ", e)
@@ -62,15 +194,14 @@ class MainWindow(UI_MainWindow):
 
 
 
-    def load_song_file(self):
+    def load_song_file(self, ):
         filePath, _ = QFileDialog.getOpenFileName(None, "Open File", "", "Sound Files (*.wav , *.mp3)")
         if filePath:
             try:
                 # Import Audio Data using Librosa
                 audioData, samplingRate = librosa.load(path=filePath, sr=None)
-                print("Audio Loaded Successfully")
-                print(f"Sampling Rate : {samplingRate}")
-                return audioData, samplingRate
+                song_name = filePath.split("/")[-1]
+                return song_name, filePath , audioData, samplingRate
 
 
             except Exception as e:
@@ -78,136 +209,155 @@ class MainWindow(UI_MainWindow):
                 return None
 
 
-    def convert_to_spectrogram(self, audioData, FileNumber):
-        # Convert the data into Spectrogram + Log Scale and save it in a variable according to the FileNumber
+    def extract_features(self, fileNumber): 
         try:
-            stft = librosa.stft(audioData)
-            spectrogram = np.abs(stft)
-            # Convert it Log Scale
-            spectrogram_db  = librosa.amplitude_to_db(spectrogram, ref= np.max)
-            if FileNumber == 1:
-                self.firstGraphAxis.clear()
-                audioImg = librosa.display.specshow(spectrogram_db, 
-                                        sr=22050, 
-                                        x_axis='time', 
-                                        y_axis='hz',
-                                        ax=self.firstGraphAxis, 
-                                        cmap='magma')  # sr will be changed to a constant value depending on the dataset
-                
-                if self.first_colorbar is None:
-                    self.first_colorbar = self.firstSpectrogramFig.colorbar(audioImg, ax=self.firstGraphAxis)
-                self.firstFileSpectro = spectrogram_db
-                self.firstGraphCanvas.draw()
+            if fileNumber == 1:
+                data = self.firstFileData
             else:
-                self.secondGraphAxis.clear()
-                audioImg = librosa.display.specshow(spectrogram_db, 
-                                         sr=22050, 
-                                         x_axis='time', 
-                                         y_axis='hz',
-                                         ax=self.secondGraphAxis, 
-                                         cmap='magma')  # sr will be changed to a constant value depending on the dataset
-                if self.second_colorbar is None:
-                    self.second_colorbar = self.secondSpectrogramFig.colorbar(audioImg, ax=self.secondGraphAxis)
-                self.secondGraphCanvas.draw()
-                self.secondFileSpectro = spectrogram_db
+                data = self.secondFileData
+
+            chroma_stft = librosa.feature.chroma_stft(y=data, sr=22050)
+            MFCC = librosa.feature.mfcc(y=data, sr=22050)
+            melspectrogram = librosa.feature.melspectrogram(y=data, sr=22050)
+
+            if fileNumber == 1:
+                self.firstSpectroFeatures.append(chroma_stft)
+                self.firstSpectroFeatures.append(MFCC)
+                self.firstSpectroFeatures.append(melspectrogram)
+            else:
+                self.secondSpectroFeatures.append(chroma_stft)
+                self.secondSpectroFeatures.append(MFCC)
+                self.secondSpectroFeatures.append(melspectrogram)
+
         except Exception as e:
-            print("Spectrogram Converting Failed: ", e)
-            QMessageBox.critical(self, "Error", "Failed to create spectrogram")
-            return None
-
-
-    def extract_features(self, fileNumber):
-        # We need to Focus On the Main Features on Audio Identification like: Spectral_Centroid, Chroma_stft, MFCC, melspectrogram
-        # Then we need to store it in list to pass it to the Perceptual Hashing Function 
-        data = self.firstFileData if fileNumber == 1 else self.secondFileData
-
-        
-        # All we will use is Built-In functions that computes this features to use
-        spectral_centroid = librosa.feature.spectral_centroid(y=data, sr=22050) # Change sr depending on the data
-        chroma_stft = librosa.feature.chroma_stft(y=data, sr=22050)
-        MFCC = librosa.feature.mfcc(y=data, sr=22050)
-        melspectrogram = librosa.feature.melspectrogram(y=data, sr=22050)
-        #melspectrogram = librosa.power_to_db(melspectrogram, ref=np.max)
-
-        if fileNumber == 1:
-            self.firstSpectroFeatures.append(spectral_centroid)
-            self.firstSpectroFeatures.append(chroma_stft)
-            self.firstSpectroFeatures.append(MFCC)
-            self.firstSpectroFeatures.append(melspectrogram)
-        else:
-            self.secondSpectroFeatures.append(spectral_centroid)
-            self.secondSpectroFeatures.append(chroma_stft)
-            self.secondSpectroFeatures.append(MFCC)
-            self.secondSpectroFeatures.append(melspectrogram)
-
-
-        
+            print(f"Error extracting features: {e}")
+            QMessageBox.critical(self, "Error", "Failed to extract features")
+            
 
     def clear_audio_data(self, FileNumber):
         try:
-            print("Lets Remove Audio Data")
+            print("Clearing Audio Data")
             if FileNumber == 1:
-                # Clear All the Data of First File
-                print("We need to remove First Audio File")
-                self.firstGraphAxis.clear()
-                self.firstGraphAxis.set_facecolor('#2b2b2b')
-                self.firstGraphAxis.text(0.5, 0.5, 'Load a signal to view spectrogram',
-                horizontalalignment='center', verticalalignment='center', color='#ffffff')
-                self.firstGraphCanvas.draw()
+                # Stop and clear first player
+                self.firstMediaPlayer.stop()
+                empty_content = QMediaContent()  # Create empty media content
+                self.firstMediaPlayer.setMedia(empty_content)
+                self.firstMediaPlayer.setPlaybackRate(1)
+                
+                # Clear data
                 self.firstFileData = None
                 self.firstFileSpectro = None
                 self.firstSpectroFeatures = []
+                self.firstGraphPlaying = False
+                self.firstGraphTimer.stop()
+                self.first_media_content = None
+                self.first_file_path = None
+                
+                # Clear graph
+                self.firstAudioGraph.clear()
+                self.song_1_placeholder.setText("group_XX_song_XX")
+                self.togglePlayingIcon(1)
             else:
-                # Clear All the Data of First File
-                print("We need to remove second audio File")
-                self.secondGraphAxis.clear()
-                self.secondGraphAxis.clear()
-                self.secondGraphAxis.set_facecolor('#2b2b2b')
-                self.secondGraphAxis.text(0.5, 0.5, 'Load a signal to view spectrogram',
-                horizontalalignment='center', verticalalignment='center', color='#ffffff')
-                self.secondGraphCanvas.draw()
+                # Stop and clear second player
+                self.secondMediaPlayer.stop()
+                empty_content = QMediaContent()  # Create empty media content
+                self.secondMediaPlayer.setMedia(empty_content)
+                self.secondMediaPlayer.setPlaybackRate(1)
+                
+                # Clear data
                 self.secondFileData = None
                 self.secondFileSpectro = None
-                self.secondSpectroFeatures= []
+                self.secondSpectroFeatures = []
+                self.secondGraphPlaying = False
+                self.secondGraphTimer.stop()
+                self.second_media_content = None
+                self.second_file_path = None
                 
-        
+                # Clear graph
+                self.secondAudioGraph.clear()
+                self.song_2_placeholder.setText("group_XX_song_XX")
+                self.togglePlayingIcon(2)
+                
         except Exception as e:
-            print(f"Error clearing audio data: {e}")
+            print(f"Error clearing audio: {e}")
 
 
+
+
+    
     def data_hashing(self, fileNumber):
-        #  Normalize The Features value
-        normalized_features= []
-        def normalize_feature(feature):
-            return (feature - np.min(feature)) / (np.max(feature) - np.min(feature) + 1e-10)
+        def hash_feature(feature):
+            hashed_feature = imagehash.phash((Image.fromarray(feature)), hash_size=16).__str__()
+            return hashed_feature
         
+        # ------------------------------------------- Edit The Following and make applied on the mixed music between the two songs --------------------- #
         if fileNumber == 1:
-            for feature in self.firstSpectroFeatures:
-                normalized_features.append(normalize_feature(feature))
+            hashed_mfcc = hash_feature(self.firstSpectroFeatures[1])
+            hashed_chroma = hash_feature(self.firstSpectroFeatures[0])
+            hashed_mel = hash_feature(self.firstSpectroFeatures[2])
         else:
-            for feature in self.secondSpectroFeatures:
-                normalized_features.append(normalize_feature(feature))
+            hashed_mfcc = hash_feature(self.secondSpectroFeatures[1])
+            hashed_chroma = hash_feature(self.secondSpectroFeatures[0])
+            hashed_mel = hash_feature(self.secondSpectroFeatures[2])
 
-        #  Combine All Features into one vector
-        combined_features = np.hstack([
-            normalized_features[0].flatten(), 
-            normalized_features[1].flatten(), 
-            normalized_features[2].flatten(), 
-            normalized_features[3].flatten() 
-        ])
-        
-        #  Digitize / Discretize the data
-        binary_features = (combined_features > 0.5).astype(int)
-        
-        #  Convert it to a short sequence (Perceptual Hash)
-        # Convert binary features to a string
-        binary_string = ''.join(map(str, binary_features))
+        print(f"{hashed_mel},{hashed_mfcc},{hashed_chroma}")
+        hashing_dict = {
+            "mfcc": hashed_mfcc,
+            "chroma": hashed_chroma,
+            "mel": hashed_mel
+        }
 
-        # Generate a hash
-        perceptual_hash = hashlib.sha512(binary_string.encode()).hexdigest()
-        #perceptual_hash = hashlib.md5(binary_string.encode()).hexdigest()
+        return hashing_dict
+
+
+
+    def compare_hashes(self, hashing_list):
+        # Read CSV File of Database to Compare it with the all songs
+        csv_data = pd.read_csv("Database/Songs_database.csv")
+
+        songs_names = csv_data.iloc[:, 0].tolist()
+        mel_hashes = csv_data.iloc[:, 1].tolist()
+        chroma_hashes = csv_data.iloc[:, 3].tolist()
+        mfcc_hashes = csv_data.iloc[:, 2].tolist()
+
+        file_chroma_hash = hashing_list["chroma"]
+        file_mel_hash = hashing_list["mel"]
+        file_mfcc_hash = hashing_list["mfcc"]
+
+        similarity_list = []
+        for i in range(len(mel_hashes)):
+            song_mel = mel_hashes[i]
+            song_chroma = chroma_hashes[i]
+            song_mfcc = mfcc_hashes[i]
+
+            mel_difference = hex_to_hash(file_mel_hash) - hex_to_hash(song_mel)
+            chroma_difference = hex_to_hash(file_chroma_hash) - hex_to_hash(song_chroma)
+            mfcc_difference = hex_to_hash(file_mfcc_hash) - hex_to_hash(song_mfcc)
+            difference_average = (mel_difference + chroma_difference + mfcc_difference ) / 3
+            similarity = (1 - difference_average / 255) * 100
+            similarity_list.append((songs_names[i] , similarity))
+
         
-        return perceptual_hash
+        return similarity_list
+    
+
+    def rearrange_songs(self, similarity_list):
+        # Sort the List for the Heighest 10 Similarity values
+        similarity_list.sort(key=lambda x: x[1], reverse=True)
+        print("Sorted List: ", similarity_list)
+        self.results_table.clearContents()
+        self.results_table.setRowCount(0)
+        for i in range(10):
+            self.results_table.insertRow(i)
+            self.results_table.setItem(i, 0, QTableWidgetItem(similarity_list[i][0]))
+            self.results_table.setItem(i, 1, QTableWidgetItem(str(f"{similarity_list[i][1]:.2f}") + "%"))
+            self.results_table.resizeColumnsToContents()
+            self.results_table.resizeRowsToContents()
+            self.results_table.horizontalHeader().setStretchLastSection(True)
+            self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            self.results_table.verticalHeader().setStretchLastSection(True)
+            self.results_table.verticalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            
 
 
 if __name__ == "__main__":

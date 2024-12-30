@@ -13,6 +13,7 @@ import librosa.display
 import imagehash
 from PIL import Image
 import hashlib
+import pyqtgraph as pg
 
 class UI_MainWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -27,6 +28,12 @@ class UI_MainWindow(QtWidgets.QWidget):
         self.second_song_path = None
         self.songs_features={}
 
+        # --------------------- Icons --------------------- #
+        self.playIcon = QtGui.QIcon("icons/play.png")
+        self.replayIcon = QtGui.QIcon("icons/replay.png")
+        self.stopButton = QtGui.QIcon("icons/pause.png")
+
+
         # Apply dark theme
         self.setStyleSheet(
             """
@@ -40,6 +47,9 @@ class UI_MainWindow(QtWidgets.QWidget):
                 border: 1px solid #5c5c5c;
                 padding: 5px;
                 width: 150px;
+                border-radius: 5px;
+                border: 2px solid white;
+                padding: 10px;
             }
             QPushButton:hover {
                 background-color: #4c4f51;
@@ -82,6 +92,7 @@ class UI_MainWindow(QtWidgets.QWidget):
                 color: #ffffff;
                 text-align: center;
             }
+
             """
         )
         # Layout setup
@@ -145,31 +156,70 @@ class UI_MainWindow(QtWidgets.QWidget):
 
         layout.addLayout(top_layout)
 
+
+        self.firstGraphplayButton = QPushButton()
+        self.firstGraphplayButton.setIcon(self.playIcon)
+        self.firstGraphplayButton.iconSize = QtCore.QSize(50, 50)
+
+
+        self.firstGraphreplayButton = QPushButton()
+        self.firstGraphreplayButton.setIcon(self.replayIcon)
+        self.firstGraphreplayButton.iconSize = QtCore.QSize(50, 50)
+
+
         # Spectrogram placeholders
+        # Main layout for spectrograms
         spectrogram_layout = QtWidgets.QHBoxLayout()
+        
+        # First graph container
+        graph1_container = QtWidgets.QWidget()
+        graph1_layout = QtWidgets.QVBoxLayout(graph1_container)
+        
+        # Setup first graph
+        self.firstAudioGraph = pg.PlotWidget()
+        self.firstAudioGraph.showGrid(x=True, y=True)
+        self.firstAudioGraph.setBackground('#2b2b2b')
+        self.firstAudioGraph.setMinimumHeight(300)  # Set minimum height
+        graph1_layout.addWidget(self.firstAudioGraph)
+        
+        # Controls layout
+        graph1_controls = QtWidgets.QHBoxLayout()
+        graph1_controls.addWidget(self.firstGraphplayButton)
+        graph1_controls.addWidget(self.firstGraphreplayButton)
+        graph1_layout.addLayout(graph1_controls)
+        
+        # Add to main spectrogram layout
+        spectrogram_layout.addWidget(graph1_container)
+        
 
-        # First spectrogram setup
-        self.firstSpectrogramFig = Figure(figsize=(6, 3), constrained_layout=True)
-        self.firstSpectrogramFig.patch.set_facecolor('#2b2b2b')
-        self.firstGraphCanvas = FigureCanvas(self.firstSpectrogramFig)
-        self.firstGraphAxis = self.firstSpectrogramFig.add_subplot(111)
-        self.firstGraphAxis.set_facecolor('#2b2b2b')
-        self.firstGraphAxis.text(0.5, 0.5, 'Load a signal to view spectrogram',
-            horizontalalignment='center', verticalalignment='center', color='#ffffff')
+        graph2_container = QtWidgets.QWidget(self)
+        graph2_layout = QtWidgets.QVBoxLayout(graph2_container)
 
-        # Second spectrogram setup
-        self.secondSpectrogramFig = Figure(figsize=(6, 3), constrained_layout=True)
-        self.secondSpectrogramFig.patch.set_facecolor('#2b2b2b')
-        self.secondGraphCanvas = FigureCanvas(self.secondSpectrogramFig)
-        self.secondGraphAxis = self.secondSpectrogramFig.add_subplot(111)
-        self.secondGraphAxis.set_facecolor('#2b2b2b')
-        self.secondGraphAxis.text(0.5, 0.5, 'Load a signal to view spectrogram',
-            horizontalalignment='center', verticalalignment='center', color='#ffffff')
+        # Second graph setup
+        self.secondAudioGraph = pg.PlotWidget()
+        self.secondAudioGraph.showGrid(x=True, y=True)
+        self.secondAudioGraph.setBackground('#2b2b2b')
+        self.secondAudioGraph.setMinimumHeight(300)
+        graph2_layout.addWidget(self.secondAudioGraph)
 
-        # Add spectrogram canvases to layout
-        spectrogram_layout.addWidget(self.firstGraphCanvas)
-        spectrogram_layout.addWidget(self.secondGraphCanvas)
 
+        self.secondGraphPlayButton = QPushButton()
+        self.secondGraphPlayButton.setIcon(self.playIcon)
+        self.secondGraphPlayButton.iconSize = QtCore.QSize(50, 50)
+
+        self.secondGraphReplayButton = QPushButton()
+        self.secondGraphReplayButton.setIcon(self.replayIcon)
+        self.secondGraphReplayButton.iconSize = QtCore.QSize(50, 50)
+
+        graph2_controls = QtWidgets.QHBoxLayout()
+        graph2_controls.addWidget(self.secondGraphPlayButton)
+        graph2_controls.addWidget(self.secondGraphReplayButton)
+        graph2_layout.addLayout(graph2_controls)
+
+
+        spectrogram_layout.addWidget(graph2_container)
+        
+        # Add spectrogram layout to main layout
         layout.addLayout(spectrogram_layout)
 
         # Results label and table
@@ -178,9 +228,9 @@ class UI_MainWindow(QtWidgets.QWidget):
         self.results_label.setAlignment(QtCore.Qt.AlignCenter)
 
         self.results_table = QtWidgets.QTableWidget()
-        self.results_table.setRowCount(51) # 17 song * 3   ( song , music , vocals )
+        self.results_table.setRowCount(10) # 17 song * 3   ( song , music , vocals )
         self.results_table.setColumnCount(2)
-        self.results_table.setHorizontalHeaderLabels(["Matches", "Percentages"])
+        self.results_table.setHorizontalHeaderLabels(["Matches", "Similarity %"])
         self.results_table.verticalHeader().setVisible(True)
         self.results_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.results_table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
@@ -193,10 +243,10 @@ class UI_MainWindow(QtWidgets.QWidget):
         layout.addLayout(results_layout)
 
         # Connect buttons to functions
-        self.load_1st_song_btn.clicked.connect(self.load_first_song)
-        self.load_2nd_song_btn.clicked.connect(self.load_second_song)
-        self.remove_1st_song_btn.clicked.connect(self.remove_first_song)
-        self.remove_2nd_song_btn.clicked.connect(self.remove_second_song)
+        #self.load_1st_song_btn.clicked.connect(self.load_first_song)
+        #self.load_2nd_song_btn.clicked.connect(self.load_second_song)
+        #self.remove_1st_song_btn.clicked.connect(self.remove_first_song)
+        #self.remove_2nd_song_btn.clicked.connect(self.remove_second_song)
         # Connect slider movement to the update function
         self.slider.valueChanged.connect(self.update_slider_percentages)
 
