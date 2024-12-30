@@ -178,14 +178,10 @@ class MainWindow(UI_MainWindow):
                 self.secondAudioGraph.plot(audioData, pen=(0,0,255))
                 self.song_2_placeholder.setText(song_name)
             
-            print("Audio Data Loaded Sucessfully")
             self.extract_features(fileNumber)
-            print("Data Extracted Sucessfully")
 
             hashing_dict= self.data_hashing(fileNumber)
-            print("Hashing Completed")
             similarity_result = self.compare_hashes(hashing_dict)
-            print("Hashes Compared")
             self.rearrange_songs(similarity_result)
 
         except Exception as e:
@@ -334,6 +330,8 @@ class MainWindow(UI_MainWindow):
             chroma_difference = hex_to_hash(file_chroma_hash) - hex_to_hash(song_chroma)
             mfcc_difference = hex_to_hash(file_mfcc_hash) - hex_to_hash(song_mfcc)
             difference_average = (mel_difference + chroma_difference + mfcc_difference ) / 3
+            print("Compariing To Song: ", songs_names[i])
+            print(f"Chroma_diff: {chroma_difference}, Mel_diff: {mel_difference}, MFCC_diff: {mfcc_difference}")
             similarity = (1 - difference_average / 255) * 100
             similarity_list.append((songs_names[i] , similarity))
 
@@ -344,7 +342,6 @@ class MainWindow(UI_MainWindow):
     def rearrange_songs(self, similarity_list):
         # Sort the List for the Heighest 10 Similarity values
         similarity_list.sort(key=lambda x: x[1], reverse=True)
-        print("Sorted List: ", similarity_list)
         self.results_table.clearContents()
         self.results_table.setRowCount(0)
         for i in range(10):
