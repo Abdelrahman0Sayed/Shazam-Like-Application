@@ -133,39 +133,45 @@ class MainWindow(UI_MainWindow):
         self.slider_value_right.setText(f"{inverse_ratio}%")
         
         # Only perform search if both songs are loaded
-        if self.first_file_path and self.second_file_path:
+        if self.first_file_path or self.second_file_path:
             self.perform_search(ratio/100.0)  # Convert to decimal
 
     def perform_search(self, mix_ratio):
         """Perform the search with the given mix ratio"""
         try:
-            # Mix the audio data based on slider ratio
-            if self.firstFileData is not None or self.secondFileData is not None:
-                # Ensure both arrays have the same length
+            # Check if at least one song is loaded
+            if self.firstFileData is None and self.secondFileData is None:
+                raise Exception("No songs loaded")
+
+            # Handle single song cases
+            if self.firstFileData is None:
+                data_to_analyze = self.secondFileData
+            elif self.secondFileData is None:
+                data_to_analyze = self.firstFileData
+            else:
+                # Mix two songs if both are loaded
                 min_length = min(len(self.firstFileData), len(self.secondFileData))
                 first_data = self.firstFileData[:min_length]
                 second_data = self.secondFileData[:min_length]
-                
-                # Mix the audio data
-                mixed_data = (mix_ratio * first_data) + ((1 - mix_ratio) * second_data)
-                
-                # Extract features from mixed data
-                chroma_stft = librosa.feature.chroma_stft(y=mixed_data, sr=22050)
-                MFCC = librosa.feature.mfcc(y=mixed_data, sr=22050)
-                melspectrogram = librosa.feature.melspectrogram(y=mixed_data, sr=22050)
-                
-                # Hash the features
-                mixed_hashes = {
-                    "mfcc": self.hash_feature(MFCC),
-                    "chroma": self.hash_feature(chroma_stft),
-                    "mel": self.hash_feature(melspectrogram)
-                }
-                
-                # Compare hashes and get similarity
-                similarity_result = self.compare_hashes(mixed_hashes)
-                
-                # Update results table
-                self.rearrange_songs(similarity_result)
+                data_to_analyze = (mix_ratio * first_data) + ((1 - mix_ratio) * second_data)
+
+            # Extract features from data
+            chroma_stft = librosa.feature.chroma_stft(y=data_to_analyze, sr=22050)
+            MFCC = librosa.feature.mfcc(y=data_to_analyze, sr=22050)
+            melspectrogram = librosa.feature.melspectrogram(y=data_to_analyze, sr=22050)
+            
+            # Hash the features
+            mixed_hashes = {
+                "mfcc": self.hash_feature(MFCC),
+                "chroma": self.hash_feature(chroma_stft),
+                "mel": self.hash_feature(melspectrogram)
+            }
+            
+            # Compare hashes and get similarity
+            similarity_result = self.compare_hashes(mixed_hashes)
+            
+            # Update results table
+            self.rearrange_songs(similarity_result)
 
         except Exception as e:
             print(f"Mix and search error: {e}")
