@@ -623,7 +623,7 @@ class UI_MainWindow(QtWidgets.QWidget):
         self.results_label.setStyleSheet(f"""
             QLabel {{
                 color: {self.colors['text']};
-                font-size: 20px;
+                font-size: 14px;
                 font-weight: bold;
                 padding: 10px;
             }}
