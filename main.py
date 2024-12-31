@@ -62,7 +62,7 @@ class MainWindow(UI_MainWindow):
         self.load_1st_song_btn.clicked.connect(lambda: self.apply_data_recognition(1))
         self.load_2nd_song_btn.clicked.connect(lambda: self.apply_data_recognition(2))
         self.remove_1st_song_btn.clicked.connect(lambda: self.clear_audio_data(1))
-        self.remove_1st_song_btn.clicked.connect(lambda: self.clear_audio_data(2))
+        self.remove_2nd_song_btn.clicked.connect(lambda: self.clear_audio_data(2))
         self.firstGraphplayButton.clicked.connect(lambda: self.play_audio(1))
         self.secondGraphPlayButton.clicked.connect(lambda: self.play_audio(2))
         self.firstGraphreplayButton.clicked.connect(lambda: self.replay_audio(1))
@@ -131,7 +131,65 @@ class MainWindow(UI_MainWindow):
         # Update labels
         self.slider_value_left.setText(f"{ratio}%")
         self.slider_value_right.setText(f"{inverse_ratio}%")
+        
+        # Only perform search if both songs are loaded
+        if self.first_file_path and self.second_file_path:
+            self.perform_search(ratio/100.0)  # Convert to decimal
 
+    def perform_search(self, mix_ratio):
+        """Perform the search with the given mix ratio"""
+        try:
+            # Mix the audio data based on slider ratio
+            if self.firstFileData is not None or self.secondFileData is not None:
+                # Ensure both arrays have the same length
+                min_length = min(len(self.firstFileData), len(self.secondFileData))
+                first_data = self.firstFileData[:min_length]
+                second_data = self.secondFileData[:min_length]
+                
+                # Mix the audio data
+                mixed_data = (mix_ratio * first_data) + ((1 - mix_ratio) * second_data)
+                
+                # Extract features from mixed data
+                chroma_stft = librosa.feature.chroma_stft(y=mixed_data, sr=22050)
+                MFCC = librosa.feature.mfcc(y=mixed_data, sr=22050)
+                melspectrogram = librosa.feature.melspectrogram(y=mixed_data, sr=22050)
+                
+                # Hash the features
+                mixed_hashes = {
+                    "mfcc": self.hash_feature(MFCC),
+                    "chroma": self.hash_feature(chroma_stft),
+                    "mel": self.hash_feature(melspectrogram)
+                }
+                
+                # Compare hashes and get similarity
+                similarity_result = self.compare_hashes(mixed_hashes)
+                
+                # Update results table
+                self.rearrange_songs(similarity_result)
+
+        except Exception as e:
+            print(f"Mix and search error: {e}")
+
+    def search_songs(self):
+        """Button click handler for mix button"""
+        try:
+            # Check if both songs are loaded
+            if not (self.first_file_path or self.second_file_path):
+                QMessageBox.warning(self, "Warning", "Please load both songs first")
+                return
+            
+            self.mix_button.setEnabled(False)
+            
+            # Get slider value and perform search
+            mix_ratio = self.slider.value() / 100.0
+            self.perform_search(mix_ratio)
+            
+            self.mix_button.setEnabled(True)
+
+        except Exception as e:
+            print(f"Mix and search error: {e}")
+            QMessageBox.critical(self, "Error", "Failed to mix and compare songs")
+            self.mix_button.setEnabled(True)
         
 
     def apply_modern_style(self):
@@ -225,53 +283,6 @@ class MainWindow(UI_MainWindow):
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.results_table.verticalHeader().setVisible(False)
     
-    def search_songs(self):
-        try:
-            # Check if both songs are loaded
-            if not (self.first_file_path and self.second_file_path):
-                QMessageBox.warning(self, "Warning", "Please load both songs first")
-                return
-            
-            self.mix_button.setEnabled(False)
-            
-
-            # Get slider value for mixing ratio
-            mix_ratio = self.slider.value() / 100.0  # Convert percentage to decimal
-            
-            # Mix the audio data based on slider ratio
-            if self.firstFileData is not None and self.secondFileData is not None:
-                # Ensure both arrays have the same length
-                min_length = min(len(self.firstFileData), len(self.secondFileData))
-                first_data = self.firstFileData[:min_length]
-                second_data = self.secondFileData[:min_length]
-                
-                # Mix the audio data
-                mixed_data = (mix_ratio * first_data) + ((1 - mix_ratio) * second_data)
-                
-                # Extract features from mixed data
-                chroma_stft = librosa.feature.chroma_stft(y=mixed_data, sr=22050)
-                MFCC = librosa.feature.mfcc(y=mixed_data, sr=22050)
-                melspectrogram = librosa.feature.melspectrogram(y=mixed_data, sr=22050)
-                
-                # Hash the features
-                mixed_hashes = {
-                    "mfcc": self.hash_feature(MFCC),
-                    "chroma": self.hash_feature(chroma_stft),
-                    "mel": self.hash_feature(melspectrogram)
-                }
-                
-                # Compare hashes and get similarity
-                similarity_result = self.compare_hashes(mixed_hashes)
-                
-                # Update results table
-                self.rearrange_songs(similarity_result)
-
-            self.mix_button.setEnabled(True)
-
-
-        except Exception as e:
-            print(f"Mix and search error: {e}")
-            QMessageBox.critical(self, "Error", "Failed to mix and compare songs")
 
     def hash_feature(self, feature):
         """Helper method to hash a feature"""
@@ -653,8 +664,7 @@ class MainWindow(UI_MainWindow):
             self.results_table.setItem(i, 0, QTableWidgetItem(similarity_list[i][0]))
             self.results_table.setItem(i, 1, QTableWidgetItem(str(f"{similarity_list[i][1]:.2f}") + "%"))
 
-        # Resize after all data is added
-        self.results_table.resizeColumnsToContents()
+
         
     def remove_song(self, song_number):
         if song_number == 1:
