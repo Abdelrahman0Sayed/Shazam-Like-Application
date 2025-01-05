@@ -139,14 +139,15 @@ class MainWindow(UI_MainWindow):
     def perform_search(self, mix_ratio):
         """Perform the search with the given mix ratio"""
         try:
+            print("Slider Ratios: ", mix_ratio)
             # Check if at least one song is loaded
             if self.firstFileData is None and self.secondFileData is None:
                 raise Exception("No songs loaded")
 
             # Handle single song cases
-            if self.firstFileData is None:
+            if self.firstFileData is None or mix_ratio == 0:
                 data_to_analyze = self.secondFileData
-            elif self.secondFileData is None:
+            elif self.secondFileData is None or mix_ratio == 1:
                 data_to_analyze = self.firstFileData
             else:
                 # Mix two songs if both are loaded
@@ -650,7 +651,6 @@ class MainWindow(UI_MainWindow):
     def rearrange_songs(self, similarity_list):
         # Sort the List for the Heighest 10 Similarity values
         similarity_list.sort(key=lambda x: x[1], reverse=True)
-        print("Sorted List: ", similarity_list)
         self.results_table.clearContents()
         self.results_table.setRowCount(0)
 
