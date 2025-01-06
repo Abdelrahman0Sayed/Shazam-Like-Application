@@ -1,0 +1,12 @@
+PyQt5
+pyqtgraph
+numpy
+pandas
+scipy
+validators
+requests
+reportlab
+matplotlib
+librosa
+sounddevice
+imagehash
