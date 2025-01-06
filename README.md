@@ -66,6 +66,9 @@ This project is a **signal fingerprinting application** inspired by Shazam. The 
 - GUI sliders allow intuitive control over file mixing.
 
 ---
+#### **Demo**
+https://github.com/user-attachments/assets/32582291-1c0d-40ed-97d5-5f8d929d3cbd
+
 
 ## Example Workflow
 
