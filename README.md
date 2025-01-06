@@ -1,5 +1,6 @@
 
 # Fingerprint (Shazam-like App)
+![App_UI](images/app_ui.png)
 
 ## Introduction
 
