@@ -17,38 +17,26 @@ from imagehash import hex_to_hash
 import os
 from PyQt5 import QtCore, QtWidgets
 
-
-
 class MainWindow(UI_MainWindow):
-    
     def __init__(self):
         super().__init__()
-
-        self.CHUNK_SIZE = 2048 * 4  # Audio chunk size
-        self.UPDATE_INTERVAL = 100  # ms between updates
-        self.MAX_POINTS = 1000  # Max points to display
-        
-        # Attributes
+        self.CHUNK_SIZE = 2048 * 4  
+        self.UPDATE_INTERVAL = 100  
+        self.MAX_POINTS = 1000 
         self.firstMediaPlayer = QMediaPlayer()
         self.secondMediaPlayer = QMediaPlayer()
-
         self.first_file_path = None
         self.second_file_path = None
-
         self.firstFileData = None
         self.firstFileSpectro = None
         self.firstSpectroFeatures = []
         self.first_colorbar = None
-
         self.secondFileData = None
         self.secondFileSpectro = None
         self.secondSpectroFeatures = []
         self.second_colorbar = None
-
-        # Controls Attributes
         self.firstGraphPlaying = False
         self.secondGraphPlaying = False
-
         self.firstGraphTimer= QTimer()
         self.secondGraphTimer = QTimer()
         self.firstGraphTimer.timeout.connect(lambda: self.updatePosition(1))
@@ -57,8 +45,6 @@ class MainWindow(UI_MainWindow):
         self.second_plot_item = None
         self.first_line_item = None
         self.second_line_item = None
-
-        # Lets Create Our Connections
         self.load_1st_song_btn.clicked.connect(lambda: self.apply_data_recognition(1))
         self.load_2nd_song_btn.clicked.connect(lambda: self.apply_data_recognition(2))
         self.remove_1st_song_btn.clicked.connect(lambda: self.clear_audio_data(1))
@@ -67,24 +53,14 @@ class MainWindow(UI_MainWindow):
         self.secondGraphPlayButton.clicked.connect(lambda: self.play_audio(2))
         self.firstGraphreplayButton.clicked.connect(lambda: self.replay_audio(1))
         self.secondGraphReplayButton.clicked.connect(lambda: self.replay_audio(2))
-
         self.mix_button.clicked.connect(self.search_songs)
         self.slider.valueChanged.connect(self.update_mix_ratio)
-
-        
-
-
-
-
-        # Apply Modern Style
         self.apply_modern_style()
-
         self.icon_paths = {
             'play': os.path.join(os.path.dirname(__file__), 'icons', 'play.png'),
             'pause': os.path.join(os.path.dirname(__file__), 'icons', 'pause.png'),
             'mix': os.path.join(os.path.dirname(__file__), 'icons', 'mix.png')
         }
-
         self.default_mix_button_style = f"""
             QPushButton {{
                 background: qradialgradient(
@@ -106,7 +82,6 @@ class MainWindow(UI_MainWindow):
                 );
             }}
         """
-
         self.loading_mix_button_style = f"""
             QPushButton {{
                 background: qradialgradient(
@@ -118,79 +93,55 @@ class MainWindow(UI_MainWindow):
                 border-radius: 100px;
                 border: 2px solid rgba(255, 255, 255, 0.1);
             }}
-        """
-        
-        # Set initial style
+        """        
         self.mix_button.setStyleSheet(self.default_mix_button_style)
 
     def update_mix_ratio(self):
-        """Update mix ratio when slider changes"""
         ratio = self.slider.value()
-        inverse_ratio = 100 - ratio
-        
-        # Update labels
+        inverse_ratio = 100 - ratio        
         self.slider_value_left.setText(f"{ratio}%")
-        self.slider_value_right.setText(f"{inverse_ratio}%")
-        
-        # Only perform search if both songs are loaded
+        self.slider_value_right.setText(f"{inverse_ratio}%")        
         if self.first_file_path or self.second_file_path:
             self.perform_search(ratio/100.0)  # Convert to decimal
 
     def perform_search(self, mix_ratio):
-        """Perform the search with the given mix ratio"""
         try:
             print("Slider Ratios: ", mix_ratio)
-            # Check if at least one song is loaded
             if self.firstFileData is None and self.secondFileData is None:
                 raise Exception("No songs loaded")
-
-            # Handle single song cases
             if self.firstFileData is None or mix_ratio == 0:
                 data_to_analyze = self.secondFileData
             elif self.secondFileData is None or mix_ratio == 1:
                 data_to_analyze = self.firstFileData
             else:
-                # Mix two songs if both are loaded
                 min_length = min(len(self.firstFileData), len(self.secondFileData))
                 first_data = self.firstFileData[:min_length]
                 second_data = self.secondFileData[:min_length]
                 data_to_analyze = (mix_ratio * first_data) + ((1 - mix_ratio) * second_data)
-
-            # Extract features from data
-            chroma_stft = librosa.feature.chroma_stft(y=data_to_analyze, sr=22050)
-            MFCC = librosa.feature.mfcc(y=data_to_analyze, sr=22050)
-            melspectrogram = librosa.feature.melspectrogram(y=data_to_analyze, sr=22050)
             
-            # Hash the features
+            chroma_stft = librosa.feature.chroma_stft(y=data_to_analyze)
+            MFCC = librosa.feature.mfcc(y=data_to_analyze)
+            melspectrogram = librosa.feature.melspectrogram(y=data_to_analyze)            
             mixed_hashes = {
                 "mfcc": self.hash_feature(MFCC),
                 "chroma": self.hash_feature(chroma_stft),
                 "mel": self.hash_feature(melspectrogram)
-            }
-            
-            # Compare hashes and get similarity
-            similarity_result = self.compare_hashes(mixed_hashes)
-            
-            # Update results table
+            }            
+            similarity_result = self.compare_hashes(mixed_hashes)            
             self.rearrange_songs(similarity_result)
 
         except Exception as e:
             print(f"Mix and search error: {e}")
 
     def search_songs(self):
-        """Button click handler for mix button"""
         try:
             # Check if both songs are loaded
             if not (self.first_file_path or self.second_file_path):
                 QMessageBox.warning(self, "Warning", "Please load both songs first")
                 return
-            
-            self.mix_button.setEnabled(False)
-            
-            # Get slider value and perform search
+            self.mix_button.setEnabled(False)            
             mix_ratio = self.slider.value() / 100.0
             self.perform_search(mix_ratio)
-            
             self.mix_button.setEnabled(True)
 
         except Exception as e:
@@ -198,9 +149,7 @@ class MainWindow(UI_MainWindow):
             QMessageBox.critical(self, "Error", "Failed to mix and compare songs")
             self.mix_button.setEnabled(True)
         
-
     def apply_modern_style(self):
-        # Base styles with neumorphic design
         dark_palette = """
         QMainWindow {
             background: #1a1a2e;
@@ -248,15 +197,11 @@ class MainWindow(UI_MainWindow):
         }
         """
         self.setStyleSheet(dark_palette)
-        
-        # Enhanced graph styling
         for graph in [self.firstAudioGraph, self.secondAudioGraph]:
             graph.setBackground('#1a1a2e')
             graph.setForegroundBrush(QBrush(QColor(233, 236, 239, 30)))
             graph.showGrid(x=True, y=True, alpha=0.1)
-            graph.setContentsMargins(20, 20, 20, 20)
-        
-        # Circular play/pause buttons
+            graph.setContentsMargins(20, 20, 20, 20)        
         for btn in [self.firstGraphplayButton, self.secondGraphPlayButton]:
             btn.setMinimumSize(50, 50)
             btn.setMaximumSize(50, 50)
@@ -274,25 +219,18 @@ class MainWindow(UI_MainWindow):
                     background-color: #2d3436;
                     box-shadow: inset 3px 3px 6px #131324, inset -3px -3px 6px #212138;
                 }
-            """)
-        
-        # Modern table styling
+            """)        
         self.results_table.setShowGrid(False)
         self.results_table.horizontalHeader().setFixedHeight(50)  # Set header height
         self.results_table.verticalHeader().setVisible(False)
         self.results_table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
         self.results_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-
-        
-
-        # Configure headers
         self.results_table.horizontalHeader().setDefaultAlignment(Qt.AlignLeft)
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.results_table.verticalHeader().setVisible(False)
     
 
     def hash_feature(self, feature):
-        """Helper method to hash a feature"""
         return imagehash.phash((Image.fromarray(feature)), hash_size=16).__str__()
             
     def play_audio(self, fileNumber):
@@ -302,18 +240,15 @@ class MainWindow(UI_MainWindow):
                     self.stopAudio(1)
                     self.firstGraphPlaying = False
                     self.firstGraphTimer.stop()
-
                 else:
                     self.firstMediaPlayer.play()
                     self.firstGraphPlaying = True
                     self.firstGraphTimer.start(100)  # Update every 100ms
-
             else:
                 if self.secondGraphPlaying:
                     self.stopAudio(2)   
                     self.secondGraphPlaying = False
                     self.firstGraphTimer.stop()
-
                 else:
                     self.secondMediaPlayer.play()
                     self.secondGraphPlaying = True
@@ -334,11 +269,8 @@ class MainWindow(UI_MainWindow):
                     # Create plot only once if not exists
                     if self.first_plot_item is None:
                         self.first_plot_item = self.firstAudioGraph.plot(self.firstFileData, pen=(0,0,255))
-                    
-                    # Update only the vertical line position
                     normalized_pos = position / duration
                     x_pos = normalized_pos * len(self.firstFileData)
-                    
                     if self.first_line_item is not None:
                         self.firstAudioGraph.removeItem(self.first_line_item)
                     self.first_line_item = self.firstAudioGraph.addLine(x=x_pos, pen='r')
@@ -348,10 +280,8 @@ class MainWindow(UI_MainWindow):
                 if duration > 0:
                     if self.second_plot_item is None:
                         self.second_plot_item = self.secondAudioGraph.plot(self.secondFileData, pen=(0,0,255))
-                    
                     normalized_pos = position / duration
                     x_pos = normalized_pos * len(self.secondFileData)
-                    
                     if self.second_line_item is not None:
                         self.secondAudioGraph.removeItem(self.second_line_item)
                     self.second_line_item = self.secondAudioGraph.addLine(x=x_pos, pen='r')
@@ -393,47 +323,35 @@ class MainWindow(UI_MainWindow):
 
     def apply_data_recognition(self, fileNumber):
         try:
-            # Show loading state
             self.mix_button.setEnabled(False)
-            self.progress_bar.show()
-            
-            # Load audio file
+            self.progress_bar.show()            
             song_name, filePath, audioData, samplingRate = self.load_song_file()
             if not filePath:
                 raise Exception("No file selected")
                 
-            # Process based on file number
             if fileNumber == 1:
-                # Update label with song name
                 self.first_song_label.setText(os.path.basename(filePath))
-                
                 url = QUrl.fromLocalFile(filePath)
                 self.firstFileData = audioData
                 self.first_media_content = QMediaContent(url)
                 self.firstMediaPlayer.setMedia(self.first_media_content)
                 self.first_file_path = filePath
-                
                 self.firstAudioGraph.clear()
                 self.plot_downsampled_waveform(audioData, self.firstAudioGraph)
-                
                 QTimer.singleShot(0, lambda: self.extract_features(1))
                 
             else:
                 # Update label with song name
                 self.second_song_label.setText(os.path.basename(filePath))
-                
                 url = QUrl.fromLocalFile(filePath)
                 self.secondFileData = audioData
                 self.second_media_content = QMediaContent(url)
                 self.secondMediaPlayer.setMedia(self.second_media_content)
                 self.second_file_path = filePath
-                
                 self.secondAudioGraph.clear()
                 self.plot_downsampled_waveform(audioData, self.secondAudioGraph)
-                
                 QTimer.singleShot(0, lambda: self.extract_features(2))
-            
-            # Reset states
+
             self.mix_button.setEnabled(True)
             self.mix_button.setStyleSheet(self.default_mix_button_style)
             self.progress_bar.hide()
@@ -453,25 +371,19 @@ class MainWindow(UI_MainWindow):
                 self.second_song_label.setText("No song selected")
             QMessageBox.critical(self, "Error", f"Failed to load audio: {str(e)}")
 
-
-
     def load_song_file(self, ):
         filePath, _ = QFileDialog.getOpenFileName(None, "Open File", "", "Sound Files (*.wav , *.mp3)")
         if filePath:
             try:
-                # Import Audio Data using Librosa
                 audioData, samplingRate = librosa.load(path=filePath, sr=None)
                 song_name = filePath.split("/")[-1]
                 return song_name, filePath , audioData, samplingRate
-
-
             except Exception as e:
                 print("Failed to Load Audio File: ", e)
                 return None
 
 
     def plot_downsampled_waveform(self, data, graph):
-        """Plot downsampled waveform for better performance"""
         if len(data) > self.MAX_POINTS:
             # Downsample the data
             downsample_factor = len(data) // self.MAX_POINTS
@@ -494,47 +406,41 @@ class MainWindow(UI_MainWindow):
                         self.firstAudioGraph.removeItem(self.first_line_item)
                     self.first_line_item = self.firstAudioGraph.addLine(x=x_pos, pen='r')
             else:
-                # Similar for second file
-                # ...existing second file code...
-                pass
+                position = self.secondMediaPlayer.position()
+                duration = self.secondMediaPlayer.duration()
+                if duration > 0:
+                    # Update position line only
+                    normalized_pos = position / duration
+                    x_pos = normalized_pos * self.MAX_POINTS
+                    
+                    if self.second_line_item is not None:
+                        self.secondAudioGraph.removeItem(self.second_line_item)
+                    self.second_line_item = self.secondAudioGraph.addLine(x=x_pos, pen='r')
+                
                     
         except Exception as e:
             print(f"Error updating position: {e}")
 
     def extract_features(self, fileNumber):
-        """Extract features in chunks to avoid UI freezing"""
         try:
             data = self.firstFileData if fileNumber == 1 else self.secondFileData
-            
-            # Process in chunks
             features = []
             chunk_size = len(data) // 10  # Process in 10 chunks
-            
             for i in range(0, len(data), chunk_size):
-                chunk = data[i:i + chunk_size]
-                
-                # Update progress bar
+                chunk = data[i:i + chunk_size]                
                 progress = (i / len(data)) * 100
-                self.progress_bar.setValue(int(progress))
-                
-                # Process chunk
-                chroma = librosa.feature.chroma_stft(y=chunk, sr=22050)
-                mfcc = librosa.feature.mfcc(y=chunk, sr=22050)
-                mel = librosa.feature.melspectrogram(y=chunk, sr=22050)
-                
-                features.extend([chroma, mfcc, mel])
-                
-                # Allow UI to update
+                self.progress_bar.setValue(int(progress))                
+                chroma = librosa.feature.chroma_stft(y=chunk)
+                mfcc = librosa.feature.mfcc(y=chunk)
+                mel = librosa.feature.melspectrogram(y=chunk)
+                features.extend([chroma, mfcc, mel])                
                 QApplication.processEvents()
-            
-            # Store features
+
             if fileNumber == 1:
                 self.firstSpectroFeatures = features
             else:
                 self.secondSpectroFeatures = features
-                
             self.progress_bar.hide()
-            
         except Exception as e:
             print(f"Error extracting features: {e}")
             self.progress_bar.hide()
@@ -544,13 +450,10 @@ class MainWindow(UI_MainWindow):
         try:
             print("Clearing Audio Data")
             if FileNumber == 1:
-                # Stop and clear first player
                 self.firstMediaPlayer.stop()
                 empty_content = QMediaContent()
                 self.firstMediaPlayer.setMedia(empty_content)
                 self.firstMediaPlayer.setPlaybackRate(1)
-                
-                # Clear data
                 self.firstFileData = None
                 self.firstFileSpectro = None
                 self.firstSpectroFeatures = []
@@ -558,45 +461,31 @@ class MainWindow(UI_MainWindow):
                 self.firstGraphTimer.stop()
                 self.first_media_content = None
                 self.first_file_path = None
-                
-                # Clear graph and label
                 self.firstAudioGraph.clear()
                 self.first_song_label.setText("No song selected")
                 self.togglePlayingIcon(1)
             else:
-                # Stop and clear second player
                 self.secondMediaPlayer.stop()
                 empty_content = QMediaContent()
                 self.secondMediaPlayer.setMedia(empty_content)
                 self.secondMediaPlayer.setPlaybackRate(1)
-                
-                # Clear data
                 self.secondFileData = None
                 self.secondFileSpectro = None
                 self.secondSpectroFeatures = []
                 self.secondGraphPlaying = False
                 self.secondGraphTimer.stop()
                 self.second_media_content = None
-                self.second_file_path = None
-                
-                # Clear graph and label
+                self.second_file_path = None                
                 self.secondAudioGraph.clear()
                 self.second_song_label.setText("No song selected")
                 self.togglePlayingIcon(2)
-                
         except Exception as e:
             print(f"Error clearing audio: {e}")
-
-
-
-
     
     def data_hashing(self, fileNumber):
         def hash_feature(feature):
             hashed_feature = imagehash.phash((Image.fromarray(feature)), hash_size=16).__str__()
             return hashed_feature
-        
-        # ------------------------------------------- Edit The Following and make applied on the mixed music between the two songs --------------------- #
         if fileNumber == 1:
             hashed_mfcc = hash_feature(self.firstSpectroFeatures[1])
             hashed_chroma = hash_feature(self.firstSpectroFeatures[0])
@@ -605,82 +494,59 @@ class MainWindow(UI_MainWindow):
             hashed_mfcc = hash_feature(self.secondSpectroFeatures[1])
             hashed_chroma = hash_feature(self.secondSpectroFeatures[0])
             hashed_mel = hash_feature(self.secondSpectroFeatures[2])
-
         print(f"{hashed_mel},{hashed_mfcc},{hashed_chroma}")
         hashing_dict = {
             "mfcc": hashed_mfcc,
             "chroma": hashed_chroma,
             "mel": hashed_mel
         }
-
         return hashing_dict
 
-
-
     def compare_hashes(self, hashing_list):
-        # Read CSV File of Database to Compare it with the all songs
         db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Database", "Songs_database.csv")
         csv_data = pd.read_csv(db_path)
-
         songs_names = csv_data.iloc[:, 0].tolist()
         mel_hashes = csv_data.iloc[:, 1].tolist()
         chroma_hashes = csv_data.iloc[:, 3].tolist()
         mfcc_hashes = csv_data.iloc[:, 2].tolist()
-
         file_chroma_hash = hashing_list["chroma"]
         file_mel_hash = hashing_list["mel"]
         file_mfcc_hash = hashing_list["mfcc"]
-
         similarity_list = []
         for i in range(len(mel_hashes)):
             song_mel = mel_hashes[i]
             song_chroma = chroma_hashes[i]
             song_mfcc = mfcc_hashes[i]
-
             mel_difference = hex_to_hash(file_mel_hash) - hex_to_hash(song_mel)
             chroma_difference = hex_to_hash(file_chroma_hash) - hex_to_hash(song_chroma)
             mfcc_difference = hex_to_hash(file_mfcc_hash) - hex_to_hash(song_mfcc)
             difference_average = (mel_difference + chroma_difference + mfcc_difference ) / 3
             similarity = (1 - difference_average / 255) * 100
             similarity_list.append((songs_names[i] , similarity))
-
-        
         return similarity_list
     
-
     def rearrange_songs(self, similarity_list):
-        # Sort the List for the Heighest 10 Similarity values
         similarity_list.sort(key=lambda x: x[1], reverse=True)
         self.results_table.clearContents()
         self.results_table.setRowCount(0)
-
-        # Set default row height once before adding rows
         self.results_table.verticalHeader().setDefaultSectionSize(50)
         self.results_table.verticalHeader().setMinimumSectionSize(50)
-
-        # Configure table properties once
         self.results_table.horizontalHeader().setStretchLastSection(True)
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.results_table.verticalHeader().setStretchLastSection(True)
         self.results_table.verticalHeader().setSectionResizeMode(QHeaderView.Stretch)
-
-        # Add rows with data
         for i in range(10):
             self.results_table.insertRow(i)
             self.results_table.setItem(i, 0, QTableWidgetItem(similarity_list[i][0]))
             self.results_table.setItem(i, 1, QTableWidgetItem(str(f"{similarity_list[i][1]:.2f}") + "%"))
-
-
-        
+  
     def remove_song(self, song_number):
         if song_number == 1:
             self.first_song_label.setText("No song selected")
-            # Clear first song data
             self.first_song_path = None
             self.firstAudioGraph.clear()
         else:
             self.second_song_label.setText("No song selected")
-            # Clear second song data
             self.second_song_path = None
             self.secondAudioGraph.clear()
 
